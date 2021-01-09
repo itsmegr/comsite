@@ -2,18 +2,18 @@ const Product = require('../models/product');  //here Product is class
 
 
 exports.getProducts = (req,res,next)=>{
-    req.user.getProducts()
+    Product.getAllProducts()
     .then(products=>{
         res.render('admin/products', {
-            prods: products,
-            pageTitle: 'Admin Products',
-            path: '/admin/products',
-            hasProducts: products.length > 0
-          });
+        prods: products,
+        pageTitle: 'Admin Products',
+        path: '/admin/products',
+        hasProducts: products.length > 0
+        });
     })
     .catch(e=>{
         console.log(e);
-    })
+    });
 }
 
 exports.getAddProducts = (req,res,next)=>{
@@ -27,19 +27,10 @@ exports.getAddProducts = (req,res,next)=>{
 
 
 exports.postAddProducts = (req,res,next)=>{
-    req.user
-    .createProduct({
-        title: req.body.title,
-        price: req.body.price,
-        imageUrl: req.body.imageUrl,
-        description: req.body.description,
-    })
-    .then(result=>{
+    const newPro = new Product(req.body.title,req.body.imageUrl,req.body.price,req.body.description, req.user._id,null);
+    newPro.Save().then((result)=>{
         res.redirect('/admin/products');
-    })
-    .catch(e=>{
-        console.log(e);
-    })
+    }).catch(e=>{console.log(e)});
 }
 
 
@@ -48,9 +39,8 @@ exports.getEditProducts = (req,res,next)=>{
     if(editMode=="false"){
         res.redirect('/');
     }
-    req.user.getProducts({where:{id:req.params.id}})
-    .then(products=>{
-        product = products[0];
+    Product.getById(req.params.id)
+    .then(product=>{
         if(!product) res.redirect('/');
         res.render('admin/edit-product', {
             pageTitle: 'Add Product',
@@ -65,14 +55,7 @@ exports.getEditProducts = (req,res,next)=>{
 }
 
 exports.postEditProduct = (req,res,next)=>{
-    Product.findByPk(req.body.id)
-    .then(product=>{
-        product.title = req.body.title;
-        product.price = req.body.price;
-        product.imageUrl = req.body.imageUrl;
-        product.description = req.body.description;
-        return product.save();
-    })
+    Product.updateProduct(req.body.id,req.body.title,req.body.imageUrl,req.body.price,req.body.description)
     .then((result)=>{
         res.redirect('/admin/products');
     }).catch(e=>{
@@ -82,10 +65,7 @@ exports.postEditProduct = (req,res,next)=>{
 
 
 exports.postDeleteProduct = (req,res,next)=>{
-    Product.findByPk(req.body.id)
-    .then(product=>{
-        return product.destroy();
-    })
+    Product.deleteProduct(req.body.id)
     .then((result)=>{
         res.redirect('/admin/products');
     }).catch(e=>{
