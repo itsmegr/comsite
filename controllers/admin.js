@@ -1,18 +1,24 @@
-const Product = require('../models/product');  //here Product is class
+const Product = require('../models/product');
+const User = require('../models/user');  //here Product is class
 
-
+//something we can use here, every product has the userId and with mongoose
+//we can get the complete document of user or seleced fields
 exports.getProducts = (req,res,next)=>{
-    Product.getAllProducts()
-    .then(products=>{
+    Product.find()
+    // .select('title price -_id')
+    // .populate('userId', 'name email')
+        .then(products=>{
+        // console.log(products);
         res.render('admin/products', {
         prods: products,
         pageTitle: 'Admin Products',
         path: '/admin/products',
-        hasProducts: products.length > 0
+        hasProducts: products.length > 0,
+        isAuthenticated:req.session.loggedIn
         });
     })
     .catch(e=>{
-        console.log(e);
+        console.log(e);itsmegr/cpp_codes
     });
 }
 
@@ -21,14 +27,21 @@ exports.getAddProducts = (req,res,next)=>{
     res.render('admin/edit-product', {
         pageTitle: 'Add Product',
         path: '/admin/add-product',
-        editing: false
+        editing: false,
+        isAuthenticated:req.session.loggedIn
       });
 }
 
 
 exports.postAddProducts = (req,res,next)=>{
-    const newPro = new Product(req.body.title,req.body.imageUrl,req.body.price,req.body.description, req.user._id,null);
-    newPro.Save().then((result)=>{
+    const newPro = new Product({
+        title:req.body.title,
+        imageUrl:req.body.imageUrl,
+        price:req.body.price,
+        description:req.body.description,
+        userId:req.user
+    });
+    newPro.save().then((result)=>{
         res.redirect('/admin/products');
     }).catch(e=>{console.log(e)});
 }
@@ -39,14 +52,15 @@ exports.getEditProducts = (req,res,next)=>{
     if(editMode=="false"){
         res.redirect('/');
     }
-    Product.getById(req.params.id)
+    Product.findById(req.params.id)
     .then(product=>{
         if(!product) res.redirect('/');
         res.render('admin/edit-product', {
             pageTitle: 'Add Product',
             path: '/admin/edit-product',
             editing : editMode,
-            product:product
+            product:product,
+            isAuthenticated:req.session.loggedIn
           });
     })
     .catch(e=>{
@@ -55,7 +69,12 @@ exports.getEditProducts = (req,res,next)=>{
 }
 
 exports.postEditProduct = (req,res,next)=>{
-    Product.updateProduct(req.body.id,req.body.title,req.body.imageUrl,req.body.price,req.body.description)
+    Product.findByIdAndUpdate(req.body.id,{
+        title:req.body.title,
+        imageUrl:req.body.imageUrl,
+        price:req.body.price,
+        description:req.body.description
+    })
     .then((result)=>{
         res.redirect('/admin/products');
     }).catch(e=>{
@@ -65,8 +84,15 @@ exports.postEditProduct = (req,res,next)=>{
 
 
 exports.postDeleteProduct = (req,res,next)=>{
-    Product.deleteProduct(req.body.id)
+    const prodId=req.body.id;
+    Product.findOneAndDelete(prodId)
     .then((result)=>{
+        const newCartItems = req.user.cart.items.filter(p=>{
+            return p.productId.toString()!=prodId.toString();
+        })
+        req.user.cart.items = newCartItems;
+        return req.user.save();
+    }).then(()=>{
         res.redirect('/admin/products');
     }).catch(e=>{
         console.log(e);
