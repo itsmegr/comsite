@@ -5,6 +5,8 @@ const app = express();
 const mongoose = require('mongoose');
 const session = require('express-session');
 const mongoDbStore = require('connect-mongodb-session')(session);
+const csrf = require('csurf');
+const flash = require('connect-flash');
 
 
 const adminRoutes = require('./routes/admin');
@@ -29,7 +31,7 @@ const store = new mongoDbStore({
     collection:'sessions'
 })
 
-
+const csrfProtection = csrf();
 
 //app.use middlem runs every time when a request come
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -43,7 +45,8 @@ app.use(
     })
 );
 
-
+app.use(csrfProtection);
+app.use(flash());
 
 //adding user to every reque
 app.use((req, res, next) => {
@@ -64,7 +67,11 @@ app.use((req, res, next) => {
         })
 })
 
-
+app.use((req,res,next)=>{
+    res.locals.isAuthenticated= req.session.loggedIn;
+    res.locals.csrfToken= req.csrfToken();
+    next();
+})
 
 app.use(authRoutes);
 app.use(shopRoutes);

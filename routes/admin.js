@@ -23,8 +23,6 @@ router.post('/delete-product', isAuth, adminController.postDeleteProduct);
 router.get('/products', isAuth, adminController.getProducts);
 
 
-
-
 module.exports = router;
 
 
