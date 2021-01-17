@@ -2,6 +2,7 @@ const User = require('../models/user');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+const { validationResult } = require('express-validator/check')
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.zoho.in',
@@ -26,7 +27,11 @@ exports.getLogin = (req, res, next) => {
         path: '/login',
         isAuthenticated: req.session.loggedIn,
         message: message,
-        isError: req.flash('isError')[0]
+        isError: req.flash('isError')[0],
+        oldInput :{
+            email:'',
+            password:''
+        }
     });
 }
 
@@ -41,7 +46,12 @@ exports.getSignup = (req, res, next) => {
         path: '/signup',
         pageTitle: 'Signup',
         isAuthenticated: false,
-        message: message
+        message: message,
+        oldInput: {
+            email: '',
+            password: ''
+        },
+        validationErrors: []
     });
 };
 
@@ -68,6 +78,23 @@ exports.postSignup = (req, res, next) => {
     const email = req.body.email;
     const password = req.body.password;
     const confirmPassword = req.body.confirmPassword;
+    const errors = validationResult(req);
+
+    if (!errors.isEmpty()) {
+        // console.log(errors.array());
+        return res.status(422).render('auth/signup', {
+            path: '/signup',
+            pageTitle: 'Signup',
+            isAuthenticated: false,
+            message: errors.array()[0].msg,
+            oldInput: {
+                email: email,
+                password: password,
+                confirmPassword: req.body.confirmPassword
+            },
+            validationErrors: errors.array()
+        });
+    }
 
     User.findOne({ email: email })
         .then(userDoc => {
@@ -100,19 +127,33 @@ exports.postSignup = (req, res, next) => {
         })
         .catch(e => {
             console.log(e);
-        })
+            const error = new Error(e);
+            error.httpStatusCode = 500;
+           return next(e);
+        });
 };
 
 exports.postLogin = (req, res, next) => {
     const email = req.body.email;
     const password = req.body.password;
+
+
+
     User.findOne({ email: email })
         .then(user => {
             if (!user) {
                 // console.log('user Not found');
-                req.flash('message', ' User not found ');
-                req.flash('isError', true);
-                return res.redirect('/login');
+                return res.status(422).render('auth/login', {
+                    pageTitle: 'Login',
+                    path: '/login',
+                    isAuthenticated: req.session.loggedIn,
+                    message: 'Email or Password Invalid',
+                    isError: true,
+                    oldInput :{
+                        email:email,
+                        password:password
+                    }
+                });
             }
             bcrypt.compare(password, user.password)
                 .then(doMatch => {
@@ -124,13 +165,29 @@ exports.postLogin = (req, res, next) => {
                             res.redirect('/');
                         })
                     }
-                    req.flash('message', 'Email & Password do not match!');
-                    req.flash('isError', true);
-                    res.redirect('/login');
+                    // req.flash('message', 'Email & Password do not match!');
+                    // req.flash('isError', true);
+                    // res.redirect('/login');
+                    return res.status(422).render('auth/login', {
+                        pageTitle: 'Login',
+                        path: '/login',
+                        isAuthenticated: req.session.loggedIn,
+                        message: 'Email or Password Invalid',
+                        isError: true,
+                        oldInput :{
+                            email:email,
+                            password:password
+                        }
+                    });
                 })
                 .catch(e => { console.log(e) })
         })
-        .catch(e => { console.log(e) })
+        .catch(e => {
+            console.log(e);
+            const error = new Error(e);
+            error.httpStatusCode = 500;
+           return next(e);
+        });
 }
 
 exports.postLogout = (req, res, next) => {
@@ -178,7 +235,10 @@ exports.postForgotPassword = (req, res, next) => {
             })
             .catch(e => {
                 console.log(e);
-            })
+                const error = new Error(e);
+                error.httpStatusCode = 500;
+               return next(e);
+            });
     });
 
 }
@@ -189,7 +249,7 @@ exports.getResetPassword = (req, res, next) => {
     const token = req.params.token;
     User.findOne({ resetPassToken: token, tokenExpiration: { $gt: Date.now() } })
         .then(user => {
-            if(!user){
+            if (!user) {
                 res.redirect('/login');
             }
             let message = req.flash('error');
@@ -207,13 +267,16 @@ exports.getResetPassword = (req, res, next) => {
                 passwordToken: token
             });
         })
-        .catch(err => {
-            console.log(err);
+        .catch(e => {
+            console.log(e);
+            const error = new Error(e);
+            error.httpStatusCode = 500;
+           return next(e);
         });
 };
 
 
-exports.postResetPassword = (req,res,next)=>{
+exports.postResetPassword = (req, res, next) => {
     const newPassword = req.body.password;
     const userId = req.body.userId;
     const passwordToken = req.body.passwordToken;
@@ -222,23 +285,26 @@ exports.postResetPassword = (req,res,next)=>{
         resetPassToken: passwordToken,
         tokenExpiration: { $gt: Date.now() },
         _id: userId
-      })
-      .then(user => {
-        resetUser = user;
-        return bcrypt.hash(newPassword, 12);
-      })
-      .then(hashedPassword => {
-        resetUser.password = hashedPassword;
-        resetUser.resetPassToken = undefined;
-        resetUser.tokenExpiration = undefined;
-        return resetUser.save();
-      })
-      .then(result => {
-        req.flash('message', 'Password reset Successfully');
-        req.flash('isError', false);
-        res.redirect('/login');
-      })
-      .catch(err => {
-        console.log(err);
-      });
+    })
+        .then(user => {
+            resetUser = user;
+            return bcrypt.hash(newPassword, 12);
+        })
+        .then(hashedPassword => {
+            resetUser.password = hashedPassword;
+            resetUser.resetPassToken = undefined;
+            resetUser.tokenExpiration = undefined;
+            return resetUser.save();
+        })
+        .then(result => {
+            req.flash('message', 'Password reset Successfully');
+            req.flash('isError', false);
+            res.redirect('/login');
+        })
+        .catch(e => {
+            console.log(e);
+            const error = new Error(e);
+            error.httpStatusCode = 500;
+           return next(e);
+        });
 }
